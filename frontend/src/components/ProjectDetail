@@ -1,0 +1,107 @@
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useParams } from 'react-router-dom';
+
+function ProjectDetail() {
+  const { id } = useParams();
+  const [project, setProject] = useState(null);
+  const [newTodo, setNewTodo] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get(`http://localhost:5000/api/projects/${id}`)
+      .then(response => {
+        setProject(response.data);
+        setIsLoading(false);
+      })
+      .catch(error => console.error('Error fetching project details:', error));
+  }, [id]);
+
+  const handleAddTodo = (e) => {
+    e.preventDefault();
+    axios.post('http://localhost:5000/api/todos', { description: newTodo, projectId: id })
+      .then(response => {
+        setProject(prev => ({
+          ...prev,
+          todos: [...prev.todos, response.data]
+        }));
+        setNewTodo('');
+      })
+      .catch(error => console.error('Error adding todo:', error));
+  };
+
+  const handleExportGist = () => {
+    const completedTodos = project.todos.filter(todo => todo.status).length;
+    const totalTodos = project.todos.length;
+
+    let markdown = `# ${project.title}\n\n`;
+    markdown += `Summary: ${completedTodos} / ${totalTodos} completed\n\n`;
+
+    markdown += `## Pending Todos\n`;
+    project.todos.forEach(todo => {
+      if (!todo.status) {
+        markdown += `- [ ] ${todo.description}\n`;
+      }
+    });
+
+    markdown += `\n## Completed Todos\n`;
+    project.todos.forEach(todo => {
+      if (todo.status) {
+        markdown += `- [x] ${todo.description}\n`;
+      }
+    });
+
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${project.title}.md`;
+    a.click();
+  };
+
+  return (
+    <div>
+      {isLoading ? (
+        <p>Loading...</p>
+      ) : (
+        <div>
+          <h1>{project.title}</h1>
+          <form onSubmit={handleAddTodo}>
+            <input
+              type="text"
+              value={newTodo}
+              onChange={(e) => setNewTodo(e.target.value)}
+              placeholder="New Todo"
+              required
+            />
+            <button type="submit">Add Todo</button>
+          </form>
+          <ul>
+            {project.todos.map(todo => (
+              <li key={todo._id}>
+                <input
+                  type="checkbox"
+                  checked={todo.status}
+                  onChange={() => {
+                    axios.put(`http://localhost:5000/api/todos/${todo._id}`, { status: !todo.status })
+                      .then(() => {
+                        setProject(prev => ({
+                          ...prev,
+                          todos: prev.todos.map(t => t._id === todo._id ? { ...t, status: !t.status } : t)
+                        }));
+                      })
+                      .catch(error => console.error('Error updating todo:', error));
+                  }}
+                />
+                {todo.description}
+              </li>
+            ))}
+          </ul>
+          <button onClick={handleExportGist}>Export as Gist</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default ProjectDetail;
